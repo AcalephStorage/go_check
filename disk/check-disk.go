@@ -1,12 +1,18 @@
 package main
 
-import "fmt"
-import "bytes"
-import "strings"
-import "strconv"
-import "os/exec"
+import (
+	"bytes"
+	"fmt"
+	"strconv"
+	"strings"
 
-const(
+	"os/exec"
+
+	"github.com/newrelic/go_nagios"
+	"gopkg.in/alecthomas/kingpin.v1"
+)
+
+const (
 	system = iota
 	osd
 	rbd
@@ -22,7 +28,7 @@ func (dt useType) string() string {
 		return "OSD"
 	case rbd:
 		return "RBD"
-	default: 
+	default:
 		return ""
 	}
 }
@@ -30,42 +36,55 @@ func (dt useType) string() string {
 type diskResult struct {
 	filesystem string
 	deviceType string
-	blocks int64
-	used int64
-	available int64
-	capacity int
-	mounted string
-	usage useType
+	blocks     int64
+	used       int64
+	available  int64
+	capacity   int
+	mounted    string
+	usage      useType
 }
 
-func checkDisk(warnLevel, critLevel int) (status checkStatus, output string) {
+var (
+	warnLevel = kingpin.Flag("warn-level", "warn level").Default("85").Int()
+	critLevel = kingpin.Flag("crit-level", "crit level").Default("95").Int()
+)
+
+func main() {
+	kingpin.Version("1.0.0")
+	kingpin.Parse()
+	checkDisk(*warnLevel, *critLevel)
+}
+
+func checkDisk(warnLevel, critLevel int) {
 	cmd := exec.Command("df", "-PT", "-x", "tmpfs", "-x", "devtmpfs")
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	err := cmd.Run()
 	if err != nil {
-		fmt.Println(err)
+		nagios.Unknown(err.Error())
 	}
 	result := out.String()
 
 	var buf bytes.Buffer
 	lines := strings.Split(result, "\n")
 	devices := make([]*diskResult, len(lines)-1)
-	for i,line := range lines {
-		if i == 0 { 
+	for i, line := range lines {
+		if i == 0 {
 			fmt.Fprintln(&buf, "  ", line)
-			continue 
+			continue
 		}
 		fields := strings.Fields(line)
-		if len(fields) == 0 { continue }
+		if len(fields) == 0 {
+			continue
+		}
 		device := &diskResult{
 			filesystem: fields[0],
 			deviceType: fields[1],
-			blocks: toInt64(fields[2]),
-			used: toInt64(fields[3]),
-			available: toInt64(fields[4]),
-			capacity: toIntFromPercent(fields[5]),
-			mounted: fields[6],
+			blocks:     toInt64(fields[2]),
+			used:       toInt64(fields[3]),
+			available:  toInt64(fields[4]),
+			capacity:   toIntFromPercent(fields[5]),
+			mounted:    fields[6],
 		}
 		fillUseType(device)
 		devices[i-1] = device
@@ -75,8 +94,10 @@ func checkDisk(warnLevel, critLevel int) (status checkStatus, output string) {
 	var problemMessages bytes.Buffer
 	critCount := 0
 	warnCount := 0
-	for _,device := range devices {
-		if device == nil { continue }
+	for _, device := range devices {
+		if device == nil {
+			continue
+		}
 		switch {
 		case device.capacity >= critLevel:
 			fmt.Fprintln(&problemMessages, format(device))
@@ -87,34 +108,35 @@ func checkDisk(warnLevel, critLevel int) (status checkStatus, output string) {
 		}
 	}
 
+	status := &nagios.NagiosStatus{}
 	switch {
 	case critCount > 0:
-		status = StatusCrit
+		status.Value = nagios.NAGIOS_CRITICAL
 	case warnCount > 0:
-		status = StatusWarn
+		status.Value = nagios.NAGIOS_WARNING
 	default:
-		status = StatusOk
+		status.Value = nagios.NAGIOS_OK
 	}
 
 	var messages bytes.Buffer
 
-	fmt.Fprintf(&messages, "\nCheckDisk %v.\n\n", status.string())
+	fmt.Fprintf(&messages, "CheckDisk.\n")
 	fmt.Fprintf(&messages, "%v", buf.String())
-	if status != StatusOk {
+	if status.Value != nagios.NAGIOS_OK {
 		fmt.Fprintf(&messages, "\n\nAlerts:\n")
 		fmt.Fprintln(&messages, problemMessages.String())
 	}
-	output = messages.String()
-	return status, output
+	status.Message = messages.String()
+	nagios.ExitWithStatus(status)
 }
 
 func toInt64(str string) int64 {
-	result,_ := strconv.ParseInt(str, 10, 64)
+	result, _ := strconv.ParseInt(str, 10, 64)
 	return result
 }
 
 func toIntFromPercent(str string) int {
-	result,_ := strconv.Atoi(str[:len(str)-1])
+	result, _ := strconv.Atoi(str[:len(str)-1])
 	return result
 }
 
