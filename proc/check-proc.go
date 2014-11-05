@@ -61,17 +61,30 @@ func main() {
 	procs.filterState(*state)
 	procs.filterUser(*user)
 
-	_ = procs.message()
+	count, message := procs.summary()
 
-	fmt.Println("found:", len(procs))
+	status := &nagios.NagiosStatus{}
+	switch {
+	case *critUnder != 0 && count < *critUnder:
+		status.Value = nagios.NAGIOS_CRITICAL
+	case *critOver != 0 && count > *critOver:
+		status.Value = nagios.NAGIOS_CRITICAL
+	case *warnUnder != 0 && count < *warnUnder:
+		status.Value = nagios.NAGIOS_WARNING
+	case *warnOver != 0 && count > *warnOver:
+		status.Value = nagios.NAGIOS_WARNING
+	default:
+		status.Value = nagios.NAGIOS_OK
+	}
+	status.Message = message
+	nagios.ExitWithStatus(status)
 }
 
 func getProcs() procMaps {
-	// TODO: Re-add the missing part
 	lines := readLines("ps axwwo user,pid,vsz,rss,pcpu,state,etime,time,command")
 	procs := make(procMaps, len(lines))
 	for i, line := range lines {
-		proc := toMap(line, "user", "pid", "vsz", "rss", "pcpu", "state", "etime", "time", "command")
+		proc := toMap(line, "user", "pid", "vsz", "rss", "pcpu", "nlwp", "state", "etime", "time", "command")
 		procs[i] = proc
 	}
 	return procs
@@ -131,6 +144,22 @@ func readPid(filePid string) int64 {
 	}
 
 	return pid
+}
+
+func timeToSec(etime string) int {
+	rxp, err := regexp.Compile("((\\d+)-)?((\\d\\d):)?(\\d\\d):(\\d\\d)")
+	if err != nil {
+		nagios.Unknown(err.Error())
+	}
+	matches := rxp.FindStringSubmatch(etime)
+	multipier := []int{0, 0, 86400, 0, 3600, 60, 1}
+	seconds := 0
+	for i, match := range matches {
+		if val, err := strconv.Atoi(match); err == nil {
+			seconds += val * multipier[i]
+		}
+	}
+	return seconds
 }
 
 func (pms *procMaps) reject(rf rejectFunc) {
@@ -218,33 +247,116 @@ func (pms *procMaps) filterPcpu(pcpu float64) {
 }
 
 func (pms *procMaps) filterThreadCount(threadCount int) {
-	// TODO
+	if threadCount > 0 {
+		pms.reject(func(p procMap) bool {
+			procTc, err := strconv.Atoi(p["thcount"])
+			if err != nil {
+				nagios.Unknown(err.Error())
+			}
+			return procTc > threadCount
+		})
+	}
 }
 
 func (pms *procMaps) filterEsecUnder(esecUnder int) {
-
+	if esecUnder > 0 {
+		pms.reject(func(p procMap) bool {
+			procEsec := timeToSec(p["etime"])
+			return procEsec >= esecUnder
+		})
+	}
 }
 
 func (pms *procMaps) filterEsecOver(esecOver int) {
-
+	if esecOver > 0 {
+		pms.reject(func(p procMap) bool {
+			procEsec := timeToSec(p["etime"])
+			return procEsec <= esecOver
+		})
+	}
 }
 
 func (pms *procMaps) filterCpuUnder(cpuUnder int) {
-
+	if cpuUnder > 0 {
+		pms.reject(func(p procMap) bool {
+			procCsec := timeToSec(p["time"])
+			return procCsec >= cpuUnder
+		})
+	}
 }
 
 func (pms *procMaps) filterCpuOver(cpuOver int) {
-
+	if cpuOver > 0 {
+		pms.reject(func(p procMap) bool {
+			procCsec := timeToSec(p["time"])
+			return procCsec <= cpuOver
+		})
+	}
 }
 
 func (pms *procMaps) filterState(state string) {
-
+	if state != "" {
+		pms.reject(func(p procMap) bool {
+			return !strings.Contains(state, p["state"])
+		})
+	}
 }
 
 func (pms *procMaps) filterUser(user string) {
-
+	if user != "" {
+		pms.reject(func(p procMap) bool {
+			return !strings.Contains(user, p["user"])
+		})
+	}
 }
 
-func (pms *procMaps) message() string {
-	return ""
+func (pms *procMaps) summary() (count int, msg string) {
+	msg = fmt.Sprintf("Found %d matching processes", len(*pms))
+	if *pattern != "" {
+		msg += fmt.Sprintf("; cmd /%s/", *pattern)
+	}
+	if *state != "" {
+		msg += fmt.Sprintf("; state %s", *state)
+	}
+	if *user != "" {
+		msg += fmt.Sprintf("; user %s", *user)
+	}
+	if *vsz > 0 {
+		msg += fmt.Sprintf("; vsz < %d", *vsz)
+	}
+	if *rss > 0 {
+		msg += fmt.Sprintf("; rss < %d", *rss)
+	}
+	if *pcpu > 0 {
+		msg += fmt.Sprintf("; pcpu < %0.1f", *pcpu)
+	}
+	if *threadCount > 0 {
+		msg += fmt.Sprintf("; thcount < %d", *threadCount)
+	}
+	if *esecUnder > 0 {
+		msg += fmt.Sprintf("; esec < %d", *esecUnder)
+	}
+	if *esecOver > 0 {
+		msg += fmt.Sprintf("; esec > %d", *esecOver)
+	}
+	if *cpuUnder > 0 {
+		msg += fmt.Sprintf("; csec < %d", *cpuUnder)
+	}
+	if *cpuOver > 0 {
+		msg += fmt.Sprintf("; csec > %d", *cpuOver)
+	}
+	if *filePid != "" {
+		msg += fmt.Sprintf("; pid %s", *filePid)
+	}
+
+	if *metric != "" {
+		for _, p := range *pms {
+			if val, err := strconv.Atoi(p[*metric]); err == nil {
+				count += val
+			}
+		}
+	} else {
+		count = len(*pms)
+	}
+	return
 }
