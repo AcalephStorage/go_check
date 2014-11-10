@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+
+clean() {
+	echo '---> Cleaning'
+	rm -rf ./build
+}
+
+test() {
+	echo '---> Testing'
+	mkdir -p ./build/test
+	go test -outputdir build/test ./...
+}
+
+build() {
+	export GOOS=$1
+	export GOARCH=$2
+	echo "---> Building $GOOS $GOARCH"
+	mkdir -p ./build/bin/$GOOS-$GOARCH
+	for i in *; do
+		[ -d "$i" ] && \
+		[ "Godeps" != "$i" ] && \
+		[ "build" != "$i" ] && \
+		go build -o build/bin/$GOOS-$GOARCH/check-$i ./$i && \
+		echo " - check-$i"
+	done
+}
+
+package() {
+	build linux 386
+	build linux amd64
+	echo '---> Packaging'
+	mkdir -p ./build/dist
+	tar -zcf ./build/dist/go-checks-linux-386.tar.gz -C ./build/bin/linux-386 .
+	echo ' - build/disk/go-checks-linux-386.tar.gz'
+	tar -zcf ./build/dist/go-checks-linux-amd64.tar.gz -C ./build/bin/linux-amd64 .
+	echo ' - build/disk/go-checks-linux-amd64.tar.gz'
+}
+
+main() {
+	set -eo pipefail
+	while [ "$#" != "0" ]; do 
+		case "$1" in
+		clean) 
+			shift
+			clean
+			;;
+		test)
+			shift
+			test
+			;;
+		build)
+			shift
+			build
+			;;
+	    package)
+			shift
+			package
+			;;
+		*)
+		esac
+	done
+}
+
+main "$@"
