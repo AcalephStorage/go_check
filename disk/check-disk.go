@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	system = iota
+	system useType = iota
 	osd
 	rbd
 )
@@ -56,6 +56,14 @@ func main() {
 }
 
 func checkDisk(warnLevel, critLevel int) {
+	result := getData()
+	devices, outputText := parseResult(result)
+	critCount, warnCount, problems := summarize(devices, critLevel, warnLevel)
+	status := doCheck(critCount, warnCount, outputText, problems)
+	nagios.ExitWithStatus(status)
+}
+
+func getData() string {
 	cmd := exec.Command("df", "-PT", "-x", "tmpfs", "-x", "devtmpfs")
 	var out bytes.Buffer
 	cmd.Stdout = &out
@@ -63,8 +71,10 @@ func checkDisk(warnLevel, critLevel int) {
 	if err != nil {
 		nagios.Unknown(err.Error())
 	}
-	result := out.String()
+	return out.String()
+}
 
+func parseResult(result string) ([]*diskResult, string) {
 	var buf bytes.Buffer
 	lines := strings.Split(result, "\n")
 	devices := make([]*diskResult, len(lines)-1)
@@ -90,7 +100,10 @@ func checkDisk(warnLevel, critLevel int) {
 		devices[i-1] = device
 		fmt.Fprintln(&buf, "  ", line)
 	}
+	return devices, buf.String()
+}
 
+func summarize(devices []*diskResult, critical, warning int) (int, int, string) {
 	var problemMessages bytes.Buffer
 	critCount := 0
 	warnCount := 0
@@ -99,15 +112,18 @@ func checkDisk(warnLevel, critLevel int) {
 			continue
 		}
 		switch {
-		case device.capacity >= critLevel:
-			fmt.Fprintln(&problemMessages, format(device))
+		case device.capacity >= critical:
+			fmt.Fprintln(&problemMessages, device.string())
 			critCount++
-		case device.capacity >= warnLevel:
-			fmt.Fprintln(&problemMessages, format(device))
+		case device.capacity >= warning:
+			fmt.Fprintln(&problemMessages, device.string())
 			warnCount++
 		}
 	}
+	return critCount, warnCount, problemMessages.String()
+}
 
+func doCheck(critCount, warnCount int, outputText, problems string) *nagios.NagiosStatus {
 	status := &nagios.NagiosStatus{}
 	switch {
 	case critCount > 0:
@@ -119,24 +135,29 @@ func checkDisk(warnLevel, critLevel int) {
 	}
 
 	var messages bytes.Buffer
-
 	fmt.Fprintf(&messages, "CheckDisk.\n")
-	fmt.Fprintf(&messages, "%v", buf.String())
+	fmt.Fprintf(&messages, "%v", outputText)
 	if status.Value != nagios.NAGIOS_OK {
 		fmt.Fprintf(&messages, "\n\nAlerts:\n")
-		fmt.Fprintln(&messages, problemMessages.String())
+		fmt.Fprintln(&messages, problems)
 	}
 	status.Message = messages.String()
-	nagios.ExitWithStatus(status)
+	return status
 }
 
 func toInt64(str string) int64 {
-	result, _ := strconv.ParseInt(str, 10, 64)
+	result, err := strconv.ParseInt(str, 10, 64)
+	if err != nil {
+		nagios.Unknown(err.Error())
+	}
 	return result
 }
 
 func toIntFromPercent(str string) int {
-	result, _ := strconv.Atoi(str[:len(str)-1])
+	result, err := strconv.Atoi(str[:len(str)-1])
+	if err != nil {
+		nagios.Unknown(err.Error())
+	}
 	return result
 }
 
@@ -151,6 +172,6 @@ func fillUseType(device *diskResult) {
 	}
 }
 
-func format(device *diskResult) string {
-	return fmt.Sprintf("  %v device %v is at %v%% capacity.", device.usage.string(), device.filesystem, device.capacity)
+func (d *diskResult) string() string {
+	return fmt.Sprintf("  %v device %v is at %v%% capacity.", d.usage.string(), d.filesystem, d.capacity)
 }

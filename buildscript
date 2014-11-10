@@ -44,7 +44,7 @@ main() {
 		test)		shift;		test;;
 		build)		shift;		build;;
 	    package)	shift;		package;;
-		*)
+		*)			shift;		test; 		exit 0;;
 		esac
 	done
 }
