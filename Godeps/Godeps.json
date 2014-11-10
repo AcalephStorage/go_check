@@ -1,0 +1,22 @@
+{
+	"ImportPath": "github.com/AcalephStorage/go_check",
+	"GoVersion": "go1.3.3",
+	"Packages": [
+		"./..."
+	],
+	"Deps": [
+		{
+			"ImportPath": "github.com/alecthomas/units",
+			"Rev": "2520fa84b92528712dc56507660230aca45d6c79"
+		},
+		{
+			"ImportPath": "github.com/newrelic/go_nagios",
+			"Rev": "a637e544c77892e3a67fcf4a08ddb3d838d3a242"
+		},
+		{
+			"ImportPath": "gopkg.in/alecthomas/kingpin.v1",
+			"Comment": "v1.3.1",
+			"Rev": "20327c1071cc1cc9de41a4d0fbea3eea11ac8115"
+		}
+	]
+}

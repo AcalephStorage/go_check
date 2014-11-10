@@ -7,8 +7,8 @@ import (
 
 	"io/ioutil"
 
-	"github.com/newrelic/go_nagios"
-	"gopkg.in/alecthomas/kingpin.v1"
+	"github.com/AcalephStorage/go_check/Godeps/_workspace/src/github.com/newrelic/go_nagios"
+	"github.com/AcalephStorage/go_check/Godeps/_workspace/src/gopkg.in/alecthomas/kingpin.v1"
 )
 
 type load struct {
