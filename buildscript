@@ -40,22 +40,10 @@ main() {
 	set -eo pipefail
 	while [ "$#" != "0" ]; do 
 		case "$1" in
-		clean) 
-			shift
-			clean
-			;;
-		test)
-			shift
-			test
-			;;
-		build)
-			shift
-			build
-			;;
-	    package)
-			shift
-			package
-			;;
+		clean)		shift;		clean;;
+		test)		shift;		test;;
+		build)		shift;		build;;
+	    package)	shift;		package;;
 		*)
 		esac
 	done
