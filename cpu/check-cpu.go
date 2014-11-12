@@ -14,8 +14,8 @@ import (
 )
 
 var (
-	warnLevel = kingpin.Flag("warn-level", "warn level").Default("0.75").Float()
-	critLevel = kingpin.Flag("crit-level", "critical level").Default("0.85").Float()
+	warnLevel = kingpin.Flag("warn-level", "warn level").Default("80").Float()
+	critLevel = kingpin.Flag("crit-level", "critical level").Default("90").Float()
 )
 
 func main() {
