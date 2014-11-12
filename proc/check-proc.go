@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	// "time"
 
 	"io/ioutil"
 	"os/exec"
@@ -81,7 +80,7 @@ func main() {
 }
 
 func getProcs() procMaps {
-	lines := readLines("ps axwwo user,pid,vsz,rss,pcpu,state,etime,time,command")
+	lines := readLines("ps axwwo user,pid,vsz,rss,pcpu,nlwp,state,etime,time,command")
 	procs := make(procMaps, len(lines))
 	for i, line := range lines {
 		proc := toMap(line, "user", "pid", "vsz", "rss", "pcpu", "nlwp", "state", "etime", "time", "command")
