@@ -36,6 +36,31 @@ package() {
 	echo ' - build/disk/go-checks-linux-amd64.tar.gz'
 }
 
+release() {
+	local version=$1;	shift;
+	local user=$1;		shift;
+	local api_key=$1;	shift;
+
+	local repo=generic
+	local app_name=go-checks
+
+	local archs=( '386' 'amd64' )
+
+	if [[ "$version" == "latest" ]]; then
+		echo "--> Removing Latest Version"
+		curl -s -X DELETE -u ${user}:${api_key} https://api.bintray.com/packages/${user}/${repo}/${app_name}/versions/${version}
+		echo
+	fi
+
+	for arch in ${archs[@]}; do
+		echo "--> Releasing version: ${version}"
+		curl -s -T "build/dist/${app_name}-linux-${arch}.tar.gz" -u "${user}:${api_key}" "https://api.bintray.com/content/${user}/${repo}/${app_name}/${version}/${app_name}-linux-${arch}-${version}.tar.gz"
+		echo	
+	done
+	curl -s -X POST -u ${user}:${api_key} https://api.bintray.com/content/${user}/${repo}/${app_name}/${version}/publish
+	echo 
+}
+
 main() {
 	set -eo pipefail
 	while [ "$#" != "0" ]; do 
@@ -43,7 +68,8 @@ main() {
 		clean)		shift;		clean;;
 		test)		shift;		test;;
 		build)		shift;		build;;
-	    package)	shift;		package;;
+		package)	shift;		package;;
+		release)	shift;		release $@;;
 		*)			shift;		test; 		exit 0;;
 		esac
 	done
