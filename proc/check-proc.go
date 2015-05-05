@@ -111,7 +111,7 @@ func toMap(line string, keys ...string) procMap {
 	ps := make(procMap)
 
 	rxp := regexp.MustCompile("\\ +")
-	lineArr := rxp.Split(line, 9)
+	lineArr := rxp.Split(line, 10)
 
 	for i := 0; i < len(lineArr); i++ {
 		key := keys[i]
